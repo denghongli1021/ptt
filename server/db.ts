@@ -378,3 +378,51 @@ export async function updateUserRole(userId: number, role: "user" | "admin") {
   
   return await db.update(users).set({ role }).where(eq(users.id, userId));
 }
+
+
+// 建立看板
+export async function createBoard(data: {
+  name: string;
+  displayName: string;
+  category: string;
+  description?: string;
+  moderatorId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(boards).values({
+    name: data.name,
+    displayName: data.displayName,
+    category: data.category,
+    description: data.description || "",
+    moderatorId: data.moderatorId,
+  });
+  
+  // 獲取剛建立的看板
+  const createdBoard = await db.select().from(boards)
+    .where(eq(boards.name, data.name))
+    .limit(1);
+  
+  return createdBoard[0] || result;
+}
+
+// 更新看板版主
+export async function updateBoardModerator(boardId: number, moderatorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.update(boards).set({
+    moderatorId: moderatorId,
+  }).where(eq(boards.id, boardId));
+}
+
+// 獲取使用者建立的看板
+export async function getUserBoards(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(boards)
+    .where(eq(boards.moderatorId, userId))
+    .orderBy(desc(boards.createdAt));
+}

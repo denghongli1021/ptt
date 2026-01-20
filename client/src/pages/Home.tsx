@@ -44,6 +44,11 @@ export default function Home() {
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
                 <span className="text-sm">{user?.name}</span>
+                <Link href="/create-board">
+                  <Button variant="outline" size="sm">
+                    建立看板
+                  </Button>
+                </Link>
                 <Link href="/bookmarks">
                   <Button variant="outline" size="sm" className="gap-1">
                     <Bookmark className="w-4 h-4" />

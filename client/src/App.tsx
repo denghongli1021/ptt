@@ -6,6 +6,7 @@ import BoardPage from "@/pages/BoardPage";
 import PostPage from "@/pages/PostPage";
 import BookmarksPage from "@/pages/BookmarksPage";
 import CreatePostPage from "@/pages/CreatePostPage";
+import CreateBoardPage from "@/pages/CreateBoardPage";
 import AdminPage from "@/pages/AdminPage";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -16,6 +17,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/admin"} component={AdminPage} />
+      <Route path={"/create-board"} component={CreateBoardPage} />
       <Route path={"/board/:boardName/create"} component={CreatePostPage} />
       <Route path={"/board/:boardName"} component={BoardPage} />
       <Route path={"/post/:postId"} component={PostPage} />

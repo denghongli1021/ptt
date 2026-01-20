@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getAllBoards,
   getBoardByName,
@@ -66,32 +66,6 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return await getBoardByName(input.name);
       }),
-
-    // 建立看板
-    create: protectedProcedure
-      .input(z.object({
-        name: z.string().min(1).max(64),
-        displayName: z.string().min(1).max(128),
-        category: z.string().min(1).max(32),
-        description: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        if (!ctx.user) throw new Error("User not authenticated");
-        return await createBoard({
-          name: input.name,
-          displayName: input.displayName,
-          category: input.category,
-          description: input.description,
-          moderatorId: ctx.user.id,
-        });
-      }),
-
-    // 獲取使用者的看板
-    getUserBoards: protectedProcedure
-      .query(async ({ ctx }) => {
-        if (!ctx.user) throw new Error("User not authenticated");
-        return await getUserBoards(ctx.user.id);
-      }),
   }),
 
   // 貼文相關路由
@@ -128,14 +102,15 @@ export const appRouter = router({
         const commentsWithAuthor = await Promise.all(
           commentsList.map(async (comment) => {
             const commentAuthorResult = await db.select().from(users).where(eq(users.id, comment.authorId)).limit(1);
+            const commentAuthor = commentAuthorResult.length > 0 ? commentAuthorResult[0] : null;
             return {
               ...comment,
-              author: commentAuthorResult.length > 0 ? commentAuthorResult[0] : null,
+              author: commentAuthor,
             };
           })
         );
 
-        // 檢查使用者是否收藏了該貼文
+        // 檢查使用者是否收藏了此貼文
         let isBookmarked = false;
         if (ctx.user) {
           isBookmarked = await isPostBookmarked(ctx.user.id, post.id);
@@ -156,7 +131,7 @@ export const appRouter = router({
         return await searchPosts(input.query);
       }),
 
-    // 建立貼文
+    // 建立新貼文（需要認證）
     create: protectedProcedure
       .input(z.object({
         boardId: z.number(),
@@ -165,6 +140,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
+
         return await createPost({
           boardId: input.boardId,
           title: input.title,
@@ -173,59 +149,80 @@ export const appRouter = router({
         });
       }),
 
-    // 編輯貼文
+    // 編輯貼文（需要認證）
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        title: z.string().optional(),
-        content: z.string().optional(),
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
-        
+
         const post = await getPostById(input.id);
         if (!post) throw new Error("Post not found");
-        
-        // 檢查權限：只有作者或管理員可以編輯
         if (post.authorId !== ctx.user.id && ctx.user.role !== "admin") {
-          throw new Error("permission denied");
+          throw new Error("You don't have permission to edit this post");
         }
-        
+
         return await updatePost(input.id, {
           title: input.title,
           content: input.content,
         });
       }),
 
-    // 刪除貼文
+    // 刪除貼文（需要認證）
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
-        
+
         const post = await getPostById(input.id);
         if (!post) throw new Error("Post not found");
-        
-        // 檢查權限：只有作者或管理員可以刪除
         if (post.authorId !== ctx.user.id && ctx.user.role !== "admin") {
-          throw new Error("permission denied");
+          throw new Error("You don't have permission to delete this post");
         }
-        
+
         return await deletePost(input.id);
       }),
   }),
 
   // 推文相關路由
   comments: router({
-    // 建立推文
+    // 獲取特定貼文的推文列表
+    listByPost: publicProcedure
+      .input(z.object({ postId: z.number() }))
+      .query(async ({ input }) => {
+        const comments = await getCommentsByPost(input.postId);
+        const db = await getDb();
+        
+        if (!db) return comments.map(c => ({ ...c, author: null }));
+        
+        // 為每個推文獲取作者資訊
+        const commentsWithAuthor = await Promise.all(
+          comments.map(async (comment) => {
+            const authorResult = await db.select().from(users).where(eq(users.id, comment.authorId)).limit(1);
+            const author = authorResult.length > 0 ? authorResult[0] : null;
+            return {
+              ...comment,
+              author,
+            };
+          })
+        );
+        
+        return commentsWithAuthor;
+      }),
+
+    // 建立推文（需要認證）
     create: protectedProcedure
       .input(z.object({
         postId: z.number(),
-        content: z.string().min(1),
+        content: z.string().min(1).max(500),
         type: z.enum(["push", "booh", "neutral"]),
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
+
         return await createComment({
           postId: input.postId,
           content: input.content,
@@ -234,36 +231,80 @@ export const appRouter = router({
         });
       }),
 
-    // 編輯推文
+    // 編輯推文（需要認證）
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        content: z.string().min(1),
+        content: z.string().min(1).max(500),
       }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
-        
+
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
-        const result = await db.select().from(posts).limit(1);
-        // 此處應驗證當前使用者是推文作者
-        
+
+        const commentResult = await db.select().from((await import("../drizzle/schema")).comments).where(eq((await import("../drizzle/schema")).comments.id, input.id)).limit(1);
+        const comment = commentResult.length > 0 ? commentResult[0] : null;
+
+        if (!comment) throw new Error("Comment not found");
+        if (comment.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to edit this comment");
+        }
+
         return await updateComment(input.id, input.content);
       }),
 
-    // 刪除推文
+    // 刪除推文（需要認證）
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const commentResult = await db.select().from((await import("../drizzle/schema")).comments).where(eq((await import("../drizzle/schema")).comments.id, input.id)).limit(1);
+        const comment = commentResult.length > 0 ? commentResult[0] : null;
+
+        if (!comment) throw new Error("Comment not found");
+        if (comment.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to delete this comment");
+        }
+
         return await deleteComment(input.id);
+      }),
+
+    // 對推文進行反應（需要認證）
+    react: protectedProcedure
+      .input(z.object({
+        commentId: z.number(),
+        reaction: z.enum(["like", "dislike"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+
+        return await createCommentReaction({
+          commentId: input.commentId,
+          userId: ctx.user.id,
+          reaction: input.reaction,
+        });
       }),
   }),
 
   // 收藏相關路由
   bookmarks: router({
-    // 建立收藏
+    // 獲取使用者的收藏列表
+    list: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(20),
+        offset: z.number().default(0),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+        return await getUserBookmarks(ctx.user.id, input.limit, input.offset);
+      }),
+
+    // 收藏貼文
     create: protectedProcedure
       .input(z.object({ postId: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -271,23 +312,16 @@ export const appRouter = router({
         return await createBookmark(ctx.user.id, input.postId);
       }),
 
-    // 刪除收藏
+    // 取消收藏
     delete: protectedProcedure
       .input(z.object({ postId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         if (!ctx.user) throw new Error("User not authenticated");
         return await deleteBookmark(ctx.user.id, input.postId);
       }),
-
-    // 獲取使用者的收藏
-    list: protectedProcedure
-      .query(async ({ ctx }) => {
-        if (!ctx.user) throw new Error("User not authenticated");
-        return await getUserBookmarks(ctx.user.id);
-      }),
   }),
 
-  // 管理員路由
+  // 管理員相關路由
   admin: router({
     // 獲取所有貼文（管理員）
     posts: protectedProcedure

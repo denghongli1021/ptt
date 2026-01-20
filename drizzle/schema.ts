@@ -33,6 +33,7 @@ export const boards = mysqlTable("boards", {
   displayName: varchar("displayName", { length: 128 }).notNull(),
   category: varchar("category", { length: 32 }).notNull(),
   description: text("description"),
+  moderatorId: int("moderatorId"),
   popularity: int("popularity").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

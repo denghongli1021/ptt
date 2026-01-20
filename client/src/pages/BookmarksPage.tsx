@@ -10,7 +10,7 @@ export default function BookmarksPage() {
 
   // 獲取收藏列表
   const { data: bookmarks, isLoading } = trpc.bookmarks.list.useQuery(
-    { limit: 50, offset: 0 },
+    undefined,
     { enabled: isAuthenticated }
   );
 
