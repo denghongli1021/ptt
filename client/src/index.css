@@ -175,3 +175,49 @@
     }
   }
 }
+
+/* PTT 風格文字排版 */
+.ptt-text {
+  @apply font-mono text-sm leading-relaxed;
+}
+
+.ptt-title {
+  @apply text-lg font-bold text-accent;
+}
+
+.ptt-author {
+  @apply text-muted-foreground text-xs;
+}
+
+.ptt-divider {
+  @apply border-t border-border my-2;
+}
+
+.ptt-push {
+  @apply text-accent;
+}
+
+.ptt-booh {
+  @apply text-destructive;
+}
+
+.ptt-neutral {
+  @apply text-muted-foreground;
+}
+
+/* 經典 PTT 風格的推文顯示 */
+.ptt-comment-line {
+  @apply flex gap-2 text-xs py-1 border-b border-border;
+}
+
+.ptt-comment-type {
+  @apply w-6 text-center font-bold;
+}
+
+.ptt-comment-content {
+  @apply flex-1 break-words;
+}
+
+.ptt-comment-meta {
+  @apply text-muted-foreground text-xs;
+}

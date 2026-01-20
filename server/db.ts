@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc, and, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, boards, posts, comments, commentReactions } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,142 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// 看板相關查詢
+export async function getAllBoards() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(boards).orderBy(desc(boards.popularity));
+}
+
+export async function getBoardByName(name: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(boards).where(eq(boards.name, name)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function searchBoards(query: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(boards).where(
+    like(boards.displayName, `%${query}%`)
+  ).limit(20);
+}
+
+// 貼文相關查詢
+export async function getPostsByBoard(boardId: number, limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(posts)
+    .where(eq(posts.boardId, boardId))
+    .orderBy(desc(posts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function getPostById(postId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createPost(data: {
+  boardId: number;
+  title: string;
+  content: string;
+  authorId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(posts).values({
+    boardId: data.boardId,
+    title: data.title,
+    content: data.content,
+    authorId: data.authorId,
+  });
+  
+  return result;
+}
+
+export async function searchPosts(query: string, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(posts).where(
+    like(posts.title, `%${query}%`)
+  ).orderBy(desc(posts.createdAt)).limit(limit);
+}
+
+// 推文相關查詢
+export async function getCommentsByPost(postId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(comments)
+    .where(eq(comments.postId, postId))
+    .orderBy(comments.createdAt);
+}
+
+export async function createComment(data: {
+  postId: number;
+  content: string;
+  type: "push" | "booh" | "neutral";
+  authorId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(comments).values({
+    postId: data.postId,
+    content: data.content,
+    type: data.type,
+    authorId: data.authorId,
+  });
+  
+  // 更新貼文的推文計數
+  const post = await getPostById(Number(data.postId));
+  if (post) {
+    const commentCount = await db.select({ count: sql`COUNT(*)` })
+      .from(comments)
+      .where(eq(comments.postId, data.postId));
+    
+    const pushCount = await db.select({ count: sql`COUNT(*)` })
+      .from(comments)
+      .where(and(eq(comments.postId, data.postId), eq(comments.type, "push")));
+    
+    const boohCount = await db.select({ count: sql`COUNT(*)` })
+      .from(comments)
+      .where(and(eq(comments.postId, data.postId), eq(comments.type, "booh")));
+    
+    await db.update(posts).set({
+      commentCount: Number(commentCount[0]?.count || 0),
+      pushCount: Number(pushCount[0]?.count || 0),
+      boohCount: Number(boohCount[0]?.count || 0),
+    }).where(eq(posts.id, data.postId));
+  }
+  
+  return result;
+}
+
+// 推文互動相關查詢
+export async function createCommentReaction(data: {
+  commentId: number;
+  userId: number;
+  reaction: "like" | "dislike";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(commentReactions).values({
+    commentId: data.commentId,
+    userId: data.userId,
+    reaction: data.reaction,
+  });
+}
