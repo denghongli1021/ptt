@@ -15,6 +15,8 @@ import {
   getCommentsByPost,
   createComment,
   createCommentReaction,
+  updatePost,
+  deletePost,
   getDb,
 } from "./db";
 import { users } from "../drizzle/schema";
@@ -126,6 +128,43 @@ export const appRouter = router({
           content: input.content,
           authorId: ctx.user.id,
         });
+      }),
+
+    // 編輯貼文（需要認證）
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+
+        const post = await getPostById(input.id);
+        if (!post) throw new Error("Post not found");
+        if (post.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to edit this post");
+        }
+
+        return await updatePost(input.id, {
+          title: input.title,
+          content: input.content,
+        });
+      }),
+
+    // 刪除貼文（需要認證）
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+
+        const post = await getPostById(input.id);
+        if (!post) throw new Error("Post not found");
+        if (post.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to delete this post");
+        }
+
+        return await deletePost(input.id);
       }),
   }),
 

@@ -2,15 +2,20 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useState } from "react";
-import { Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Loader2, Edit2, Trash2 } from "lucide-react";
 
 export default function PostPage() {
   const { user, isAuthenticated } = useAuth();
   const { postId } = useParams<{ postId: string }>();
+  const [, setLocation] = useLocation();
   const [commentContent, setCommentContent] = useState("");
   const [commentType, setCommentType] = useState<"push" | "booh" | "neutral">("push");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 獲取貼文詳情
   const { data: post, isLoading: postLoading, refetch } = trpc.posts.getById.useQuery(
@@ -27,6 +32,26 @@ export default function PostPage() {
     },
   });
 
+  // 編輯貼文
+  const updatePostMutation = trpc.posts.update.useMutation({
+    onSuccess: () => {
+      setIsEditing(false);
+      refetch();
+    },
+  });
+
+  // 刪除貼文
+  const deletePostMutation = trpc.posts.delete.useMutation({
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      if (post?.boardId) {
+        setLocation(`/board/${post.boardId}`);
+      } else {
+        setLocation("/");
+      }
+    },
+  });
+
   const handleCreateComment = async () => {
     if (!post || !commentContent.trim()) return;
 
@@ -36,6 +61,31 @@ export default function PostPage() {
       type: commentType,
     });
   };
+
+  const handleStartEdit = () => {
+    if (post) {
+      setEditTitle(post.title);
+      setEditContent(post.content);
+      setIsEditing(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!post || !editTitle.trim() || !editContent.trim()) return;
+
+    await updatePostMutation.mutateAsync({
+      id: post.id,
+      title: editTitle,
+      content: editContent,
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!post) return;
+    await deletePostMutation.mutateAsync({ id: post.id });
+  };
+
+  const isAuthor = user && post && user.id === post.authorId;
 
   if (postLoading) {
     return (
@@ -70,14 +120,104 @@ export default function PostPage() {
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Post Header */}
         <div className="bg-card border border-border rounded p-4 mb-6">
-          <h1 className="text-2xl font-bold text-accent mb-2">{post.title}</h1>
-          <div className="flex gap-4 text-sm text-muted-foreground mb-4 pb-4 border-b border-border">
-            <span>作者: {post.author?.name || "Unknown"}</span>
-            <span>時間: {new Date(post.createdAt).toLocaleString()}</span>
-            <span>推: {post.pushCount} 噓: {post.boohCount}</span>
-          </div>
-          <div className="ptt-text whitespace-pre-wrap">{post.content}</div>
+          {isEditing ? (
+            // 編輯模式
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full bg-input border border-border rounded px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent text-2xl font-bold"
+              />
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={10}
+                className="w-full bg-input border border-border rounded px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent ptt-text"
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditTitle("");
+                    setEditContent("");
+                  }}
+                  disabled={updatePostMutation.isPending}
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={handleSaveEdit}
+                  disabled={updatePostMutation.isPending || !editTitle.trim() || !editContent.trim()}
+                >
+                  {updatePostMutation.isPending ? "保存中..." : "保存"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // 檢視模式
+            <>
+              <div className="flex justify-between items-start mb-2">
+                <h1 className="text-2xl font-bold text-accent flex-1">{post.title}</h1>
+                {isAuthor && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStartEdit}
+                      className="gap-1"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      編輯
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="gap-1 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      刪除
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-4 text-sm text-muted-foreground mb-4 pb-4 border-b border-border">
+                <span>作者: {post.author?.name || "Unknown"}</span>
+                <span>時間: {new Date(post.createdAt).toLocaleString()}</span>
+                <span>推: {post.pushCount} 噓: {post.boohCount}</span>
+              </div>
+              <div className="ptt-text whitespace-pre-wrap">{post.content}</div>
+            </>
+          )}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-card border border-border rounded p-6 max-w-sm">
+              <h2 className="text-lg font-bold text-accent mb-4">確認刪除</h2>
+              <p className="text-foreground mb-6">確定要刪除這篇貼文嗎？此操作無法復原。</p>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deletePostMutation.isPending}
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  disabled={deletePostMutation.isPending}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  {deletePostMutation.isPending ? "刪除中..." : "確認刪除"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Comments Section */}
         <div className="mb-6">

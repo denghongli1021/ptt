@@ -228,3 +228,35 @@ export async function createCommentReaction(data: {
     reaction: data.reaction,
   });
 }
+
+
+// 編輯貼文
+export async function updatePost(postId: number, data: {
+  title?: string;
+  content?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const updateData: Record<string, unknown> = {};
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.content !== undefined) updateData.content = data.content;
+  
+  if (Object.keys(updateData).length === 0) {
+    throw new Error("No fields to update");
+  }
+  
+  return await db.update(posts).set(updateData).where(eq(posts.id, postId));
+}
+
+// 刪除貼文
+export async function deletePost(postId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // 先刪除所有推文
+  await db.delete(comments).where(eq(comments.postId, postId));
+  
+  // 然後刪除貼文
+  return await db.delete(posts).where(eq(posts.id, postId));
+}
