@@ -88,8 +88,9 @@ export default function BoardPage() {
             {posts && posts.length > 0 ? (
               posts.map((post) => (
                 <Link key={post.id} href={`/post/${post.id}`}>
-                  <div className="grid grid-cols-12 gap-4 bg-background hover:bg-card p-3 text-sm border-b border-border cursor-pointer transition-colors">
+                  <div className="grid grid-cols-12 gap-4 bg-background hover:bg-card p-3 text-sm border-b border-border cursor-pointer transition-colors" style={{backgroundColor: post.isPinned ? 'rgba(34, 197, 94, 0.1)' : undefined}}>
                     <div className="col-span-6 text-accent truncate">
+                      {post.isPinned && <span className="text-green-500 font-bold">[置頂] </span>}
                       {post.title}
                     </div>
                     <div className="col-span-2 text-muted-foreground truncate">

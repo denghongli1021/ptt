@@ -51,7 +51,7 @@ describe("posts edit and delete", () => {
 
     // 編輯貼文
     const updateResult = await caller.posts.update({
-      id: Number(createResult.insertId),
+      id: createResult.id,
       title: "Updated Title",
       content: "Updated content",
     });
@@ -65,7 +65,7 @@ describe("posts edit and delete", () => {
     const caller1 = appRouter.createCaller(ctx1);
     const caller2 = appRouter.createCaller(ctx2);
 
-    // 使用者1建立貼文
+    // 先獲取看板列表
     const boards = await caller1.boards.list();
     if (boards.length === 0) {
       console.log("No boards available for testing");
@@ -74,13 +74,16 @@ describe("posts edit and delete", () => {
 
     const boardId = boards[0].id;
 
+    // 建立貼文
     const createResult = await caller1.posts.create({
       boardId,
-      title: "Test Post",
-      content: "Content",
+      title: "Test Post for Delete",
+      content: "Content to delete",
     });
 
-    const postId = Number(createResult.insertId);
+    expect(createResult).toBeDefined();
+
+    const postId = createResult.id;
 
     // 使用者2嘗試編輯使用者1的貼文
     try {
@@ -114,7 +117,7 @@ describe("posts edit and delete", () => {
       content: "Content to delete",
     });
 
-    const postId = Number(createResult.insertId);
+    const postId = createResult.id;
 
     // 刪除貼文
     const deleteResult = await caller.posts.delete({ id: postId });
@@ -147,7 +150,7 @@ describe("posts edit and delete", () => {
       content: "Content",
     });
 
-    const postId = Number(createResult.insertId);
+    const postId = createResult.id;
 
     // 使用者2嘗試刪除使用者1的貼文
     try {
@@ -179,7 +182,7 @@ describe("posts edit and delete", () => {
       content: "Content",
     });
 
-    const postId = Number(createResult.insertId);
+    const postId = createResult.id;
 
     // 管理員編輯貼文
     const updateResult = await callerAdmin.posts.update({

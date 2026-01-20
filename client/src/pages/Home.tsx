@@ -4,11 +4,12 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Loader2, Search, Bookmark } from "lucide-react";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   
   const { data: boards, isLoading } = trpc.boards.list.useQuery();
@@ -16,6 +17,17 @@ export default function Home() {
     { query: searchQuery },
     { enabled: searchQuery.length > 0 }
   );
+  
+  const logoutMutation = trpc.auth.logout.useMutation({
+    onSuccess: () => {
+      setLocation("/");
+      window.location.reload();
+    },
+  });
+  
+  const handleLogout = async () => {
+    await logoutMutation.mutateAsync();
+  };
 
   const displayedBoards = searchQuery ? searchResults : boards;
 
@@ -38,9 +50,14 @@ export default function Home() {
                     收藏
                   </Button>
                 </Link>
-                <Link href="/logout">
-                  <Button variant="outline" size="sm">登出</Button>
-                </Link>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleLogout}
+                  disabled={logoutMutation.isPending}
+                >
+                  {logoutMutation.isPending ? "登出中..." : "登出"}
+                </Button>
               </div>
             ) : (
               <a href={getLoginUrl()}>

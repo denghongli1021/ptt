@@ -51,6 +51,7 @@ export const posts = mysqlTable("posts", {
   commentCount: int("commentCount").default(0).notNull(),
   pushCount: int("pushCount").default(0).notNull(),
   boohCount: int("boohCount").default(0).notNull(),
+  isPinned: int("isPinned").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -121,7 +121,7 @@ export async function getPostsByBoard(boardId: number, limit = 20, offset = 0) {
   
   return await db.select().from(posts)
     .where(eq(posts.boardId, boardId))
-    .orderBy(desc(posts.createdAt))
+    .orderBy(desc(posts.isPinned), desc(posts.createdAt))
     .limit(limit)
     .offset(offset);
 }
@@ -150,7 +150,12 @@ export async function createPost(data: {
     authorId: data.authorId,
   });
   
-  return result;
+  // 獲取剛建立的貼文
+  const createdPost = await db.select().from(posts)
+    .orderBy(desc(posts.id))
+    .limit(1);
+  
+  return createdPost[0] || result;
 }
 
 export async function searchPosts(query: string, limit = 20) {

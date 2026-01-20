@@ -28,7 +28,7 @@ import {
   updateUserRole,
   getDb,
 } from "./db";
-import { users } from "../drizzle/schema";
+import { users, posts } from "../drizzle/schema";
 
 export const appRouter = router({
   system: systemRouter,
@@ -377,6 +377,20 @@ export const appRouter = router({
           throw new Error("Admin access required");
         }
         return await deleteComment(input.commentId);
+      }),
+
+    // 置頂貼文（管理員）
+    pinPost: protectedProcedure
+      .input(z.object({ postId: z.number(), isPinned: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+        return await db.update(posts).set({
+          isPinned: input.isPinned ? 1 : 0,
+        }).where(eq(posts.id, input.postId));
       }),
   }),
 });
