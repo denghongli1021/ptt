@@ -1,6 +1,6 @@
-import { eq, desc, and, like, sql } from "drizzle-orm";
+import { eq, desc, sql, and, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, boards, posts, comments, commentReactions } from "../drizzle/schema";
+import { InsertUser, users, boards, posts, comments, commentReactions, bookmarks } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -259,4 +259,117 @@ export async function deletePost(postId: number) {
   
   // 然後刪除貼文
   return await db.delete(posts).where(eq(posts.id, postId));
+}
+
+// 編輯推文
+export async function updateComment(commentId: number, content: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.update(comments).set({
+    content,
+    isEdited: 1,
+  }).where(eq(comments.id, commentId));
+}
+
+// 刪除推文
+export async function deleteComment(commentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.delete(comments).where(eq(comments.id, commentId));
+}
+
+// 建立收藏
+export async function createBookmark(userId: number, postId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // 檢查是否已收藏
+  const existing = await db.select().from(bookmarks).where(
+    eq(bookmarks.userId, userId) && eq(bookmarks.postId, postId)
+  ).limit(1);
+  
+  if (existing.length > 0) {
+    throw new Error("Already bookmarked");
+  }
+  
+  return await db.insert(bookmarks).values({
+    userId,
+    postId,
+  });
+}
+
+// 刪除收藏
+export async function deleteBookmark(userId: number, postId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.delete(bookmarks).where(
+    eq(bookmarks.userId, userId) && eq(bookmarks.postId, postId)
+  );
+}
+
+// 獲取使用者的收藏列表
+export async function getUserBookmarks(userId: number, limit: number = 20, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const bookmarkList = await db.select().from(bookmarks)
+    .where(eq(bookmarks.userId, userId))
+    .orderBy(desc(bookmarks.createdAt))
+    .limit(limit)
+    .offset(offset);
+  
+  // 獲取每個收藏的貼文詳情
+  const postsWithDetails = await Promise.all(
+    bookmarkList.map(async (bookmark) => {
+      const post = await getPostById(Number(bookmark.postId));
+      return post;
+    })
+  );
+  
+  return postsWithDetails.filter(p => p !== null);
+}
+
+// 檢查使用者是否收藏了某個貼文
+export async function isPostBookmarked(userId: number, postId: number) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const result = await db.select().from(bookmarks).where(
+    eq(bookmarks.userId, userId) && eq(bookmarks.postId, postId)
+  ).limit(1);
+  
+  return result.length > 0;
+}
+
+// 獲取所有貼文（用於管理員）
+export async function getAllPosts(limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(posts)
+    .orderBy(desc(posts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// 獲取所有使用者（用於管理員）
+export async function getAllUsers(limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return await db.select().from(users)
+    .orderBy(desc(users.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// 更新使用者角色（用於管理員）
+export async function updateUserRole(userId: number, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.update(users).set({ role }).where(eq(users.id, userId));
 }

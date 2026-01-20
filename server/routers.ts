@@ -17,6 +17,15 @@ import {
   createCommentReaction,
   updatePost,
   deletePost,
+  updateComment,
+  deleteComment,
+  createBookmark,
+  deleteBookmark,
+  getUserBookmarks,
+  isPostBookmarked,
+  getAllPosts,
+  getAllUsers,
+  updateUserRole,
   getDb,
 } from "./db";
 import { users } from "../drizzle/schema";
@@ -72,12 +81,12 @@ export const appRouter = router({
     // 獲取貼文詳情
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const post = await getPostById(input.id);
         if (!post) return null;
 
         const db = await getDb();
-        if (!db) return { ...post, author: null, comments: [] };
+        if (!db) return { ...post, author: null, comments: [], isBookmarked: false };
 
         // 獲取作者資訊
         const authorResult = await db.select().from(users).where(eq(users.id, post.authorId)).limit(1);
@@ -98,10 +107,17 @@ export const appRouter = router({
           })
         );
 
+        // 檢查使用者是否收藏了此貼文
+        let isBookmarked = false;
+        if (ctx.user) {
+          isBookmarked = await isPostBookmarked(ctx.user.id, post.id);
+        }
+
         return {
           ...post,
           author,
           comments: commentsWithAuthor,
+          isBookmarked,
         };
       }),
 
@@ -212,6 +228,49 @@ export const appRouter = router({
         });
       }),
 
+    // 編輯推文（需要認證）
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        content: z.string().min(1).max(500),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const commentResult = await db.select().from((await import("../drizzle/schema")).comments).where(eq((await import("../drizzle/schema")).comments.id, input.id)).limit(1);
+        const comment = commentResult.length > 0 ? commentResult[0] : null;
+
+        if (!comment) throw new Error("Comment not found");
+        if (comment.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to edit this comment");
+        }
+
+        return await updateComment(input.id, input.content);
+      }),
+
+    // 刪除推文（需要認證）
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const commentResult = await db.select().from((await import("../drizzle/schema")).comments).where(eq((await import("../drizzle/schema")).comments.id, input.id)).limit(1);
+        const comment = commentResult.length > 0 ? commentResult[0] : null;
+
+        if (!comment) throw new Error("Comment not found");
+        if (comment.authorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new Error("You don't have permission to delete this comment");
+        }
+
+        return await deleteComment(input.id);
+      }),
+
     // 對推文進行反應（需要認證）
     react: protectedProcedure
       .input(z.object({
@@ -226,6 +285,98 @@ export const appRouter = router({
           userId: ctx.user.id,
           reaction: input.reaction,
         });
+      }),
+  }),
+
+  // 收藏相關路由
+  bookmarks: router({
+    // 獲取使用者的收藏列表
+    list: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(20),
+        offset: z.number().default(0),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+        return await getUserBookmarks(ctx.user.id, input.limit, input.offset);
+      }),
+
+    // 收藏貼文
+    create: protectedProcedure
+      .input(z.object({ postId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+        return await createBookmark(ctx.user.id, input.postId);
+      }),
+
+    // 取消收藏
+    delete: protectedProcedure
+      .input(z.object({ postId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error("User not authenticated");
+        return await deleteBookmark(ctx.user.id, input.postId);
+      }),
+  }),
+
+  // 管理員相關路由
+  admin: router({
+    // 獲取所有貼文（管理員）
+    posts: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        return await getAllPosts(input.limit, input.offset);
+      }),
+
+    // 獲取所有使用者（管理員）
+    users: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        return await getAllUsers(input.limit, input.offset);
+      }),
+
+    // 更新使用者角色（管理員）
+    updateUserRole: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        role: z.enum(["user", "admin"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        return await updateUserRole(input.userId, input.role);
+      }),
+
+    // 刪除貼文（管理員）
+    deletePost: protectedProcedure
+      .input(z.object({ postId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        return await deletePost(input.postId);
+      }),
+
+    // 刪除推文（管理員）
+    deleteComment: protectedProcedure
+      .input(z.object({ commentId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user || ctx.user.role !== "admin") {
+          throw new Error("Admin access required");
+        }
+        return await deleteComment(input.commentId);
       }),
   }),
 });

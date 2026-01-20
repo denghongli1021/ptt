@@ -65,6 +65,7 @@ export const comments = mysqlTable("comments", {
   content: text("content").notNull(),
   type: mysqlEnum("type", ["push", "booh", "neutral"]).notNull(),
   authorId: int("authorId").notNull(),
+  isEdited: int("isEdited").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -84,10 +85,22 @@ export const commentReactions = mysqlTable("commentReactions", {
 export type CommentReaction = typeof commentReactions.$inferSelect;
 export type InsertCommentReaction = typeof commentReactions.$inferInsert;
 
+// 收藏表
+export const bookmarks = mysqlTable("bookmarks", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  postId: bigint("postId", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Bookmark = typeof bookmarks.$inferSelect;
+export type InsertBookmark = typeof bookmarks.$inferInsert;
+
 // 關係定義
 export const usersRelations = relations(users, ({ many }) => ({
   posts: many(posts),
   comments: many(comments),
+  bookmarks: many(bookmarks),
 }));
 
 export const boardsRelations = relations(boards, ({ many }) => ({
@@ -104,6 +117,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [users.id],
   }),
   comments: many(comments),
+  bookmarks: many(bookmarks),
 }));
 
 export const commentsRelations = relations(comments, ({ one, many }) => ({
@@ -126,5 +140,16 @@ export const commentReactionsRelations = relations(commentReactions, ({ one }) =
   user: one(users, {
     fields: [commentReactions.userId],
     references: [users.id],
+  }),
+}));
+
+export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
+  user: one(users, {
+    fields: [bookmarks.userId],
+    references: [users.id],
+  }),
+  post: one(posts, {
+    fields: [bookmarks.postId],
+    references: [posts.id],
   }),
 }));

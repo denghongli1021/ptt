@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useState } from "react";
 import { Link } from "wouter";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Bookmark } from "lucide-react";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -32,6 +32,12 @@ export default function Home() {
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
                 <span className="text-sm">{user?.name}</span>
+                <Link href="/bookmarks">
+                  <Button variant="outline" size="sm" className="gap-1">
+                    <Bookmark className="w-4 h-4" />
+                    收藏
+                  </Button>
+                </Link>
                 <Link href="/logout">
                   <Button variant="outline" size="sm">登出</Button>
                 </Link>

@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useParams, Link, useLocation } from "wouter";
-import { useState } from "react";
-import { Loader2, Edit2, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, Edit2, Trash2, Bookmark } from "lucide-react";
 
 export default function PostPage() {
   const { user, isAuthenticated } = useAuth();
@@ -16,6 +16,7 @@ export default function PostPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   // 獲取貼文詳情
   const { data: post, isLoading: postLoading, refetch } = trpc.posts.getById.useQuery(
@@ -49,6 +50,20 @@ export default function PostPage() {
       } else {
         setLocation("/");
       }
+    },
+  });
+
+  // 收藏貼文
+  const bookmarkMutation = trpc.bookmarks.create.useMutation({
+    onSuccess: () => {
+      setIsBookmarked(true);
+    },
+  });
+
+  // 取消收藏
+  const unbookmarkMutation = trpc.bookmarks.delete.useMutation({
+    onSuccess: () => {
+      setIsBookmarked(false);
     },
   });
 
@@ -86,6 +101,13 @@ export default function PostPage() {
   };
 
   const isAuthor = user && post && user.id === post.authorId;
+
+  // 初始化收藏狀態
+  useEffect(() => {
+    if (post?.isBookmarked) {
+      setIsBookmarked(post.isBookmarked);
+    }
+  }, [post?.isBookmarked]);
 
   if (postLoading) {
     return (
@@ -160,28 +182,42 @@ export default function PostPage() {
             <>
               <div className="flex justify-between items-start mb-2">
                 <h1 className="text-2xl font-bold text-accent flex-1">{post.title}</h1>
-                {isAuthor && (
-                  <div className="flex gap-2">
+                <div className="flex gap-2">
+                  {isAuthenticated && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleStartEdit}
+                      onClick={() => isBookmarked ? unbookmarkMutation.mutate({ postId: post.id }) : bookmarkMutation.mutate({ postId: post.id })}
+                      disabled={bookmarkMutation.isPending || unbookmarkMutation.isPending}
                       className="gap-1"
                     >
-                      <Edit2 className="w-4 h-4" />
-                      編輯
+                      <Bookmark className="w-4 h-4" />
+                      {isBookmarked ? "已收藏" : "收藏"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="gap-1 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      刪除
-                    </Button>
-                  </div>
-                )}
+                  )}
+                  {isAuthor && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleStartEdit}
+                        className="gap-1"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        編輯
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="gap-1 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        刪除
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex gap-4 text-sm text-muted-foreground mb-4 pb-4 border-b border-border">
                 <span>作者: {post.author?.name || "Unknown"}</span>
@@ -237,6 +273,7 @@ export default function PostPage() {
                     <div className="ptt-comment-content">
                       <span className="font-semibold">{comment.author?.name || "Unknown"}</span>
                       <span className="text-muted-foreground ml-2">{comment.content}</span>
+                      {comment.isEdited && <span className="text-xs text-muted-foreground ml-2">(已編輯)</span>}
                     </div>
                     <div className="ptt-comment-meta text-xs mt-1">
                       {new Date(comment.createdAt).toLocaleString()}

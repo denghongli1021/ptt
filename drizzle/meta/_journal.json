@@ -15,6 +15,13 @@
       "when": 1768893430466,
       "tag": "0001_classy_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1768894031278,
+      "tag": "0002_crazy_swordsman",
+      "breakpoints": true
     }
   ]
 }
