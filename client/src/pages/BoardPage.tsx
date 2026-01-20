@@ -3,15 +3,11 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useParams, Link } from "wouter";
-import { useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 
 export default function BoardPage() {
   const { user, isAuthenticated } = useAuth();
   const { boardName } = useParams<{ boardName: string }>();
-  const [showNewPostForm, setShowNewPostForm] = useState(false);
-  const [postTitle, setPostTitle] = useState("");
-  const [postContent, setPostContent] = useState("");
 
   // 獲取看板資訊
   const { data: board, isLoading: boardLoading } = trpc.boards.getByName.useQuery(
@@ -20,30 +16,10 @@ export default function BoardPage() {
   );
 
   // 獲取貼文列表
-  const { data: posts, isLoading: postsLoading, refetch } = trpc.posts.listByBoard.useQuery(
+  const { data: posts, isLoading: postsLoading } = trpc.posts.listByBoard.useQuery(
     { boardId: board?.id || 0, limit: 20, offset: 0 },
     { enabled: !!board }
   );
-
-  // 建立新貼文
-  const createPostMutation = trpc.posts.create.useMutation({
-    onSuccess: () => {
-      setPostTitle("");
-      setPostContent("");
-      setShowNewPostForm(false);
-      refetch();
-    },
-  });
-
-  const handleCreatePost = async () => {
-    if (!board || !postTitle.trim() || !postContent.trim()) return;
-
-    await createPostMutation.mutateAsync({
-      boardId: board.id,
-      title: postTitle,
-      content: postContent,
-    });
-  };
 
   if (boardLoading) {
     return (
@@ -77,10 +53,12 @@ export default function BoardPage() {
               <p className="text-sm text-muted-foreground mt-1">{board.description}</p>
             </div>
             {isAuthenticated ? (
-              <Button onClick={() => setShowNewPostForm(!showNewPostForm)} className="gap-2">
-                <Plus className="w-4 h-4" />
-                發文
-              </Button>
+              <Link href={`/board/${boardName}/create`}>
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  發文
+                </Button>
+              </Link>
             ) : (
               <a href={getLoginUrl()}>
                 <Button>登入發文</Button>
@@ -89,48 +67,6 @@ export default function BoardPage() {
           </div>
         </div>
       </header>
-
-      {/* New Post Form */}
-      {showNewPostForm && isAuthenticated && (
-        <div className="bg-card border-b border-border">
-          <div className="container mx-auto px-4 py-4">
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="標題"
-                value={postTitle}
-                onChange={(e) => setPostTitle(e.target.value)}
-                className="w-full bg-input border border-border rounded px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              <textarea
-                placeholder="內容"
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                rows={6}
-                className="w-full bg-input border border-border rounded px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowNewPostForm(false);
-                    setPostTitle("");
-                    setPostContent("");
-                  }}
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleCreatePost}
-                  disabled={createPostMutation.isPending || !postTitle.trim() || !postContent.trim()}
-                >
-                  {createPostMutation.isPending ? "發文中..." : "發文"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useParams, Link, useLocation } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Loader2, Edit2, Trash2, Bookmark } from "lucide-react";
 
 export default function PostPage() {
@@ -17,6 +17,7 @@ export default function PostPage() {
   const [editContent, setEditContent] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "mostPush">("newest");
 
   // 獲取貼文詳情
   const { data: post, isLoading: postLoading, refetch } = trpc.posts.getById.useQuery(
@@ -108,6 +109,27 @@ export default function PostPage() {
       setIsBookmarked(post.isBookmarked);
     }
   }, [post?.isBookmarked]);
+
+  // 排序推文
+  const sortedComments = useMemo(() => {
+    if (!post?.comments) return [];
+    
+    const comments = [...post.comments];
+    
+    switch (sortBy) {
+      case "oldest":
+        return comments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      case "mostPush":
+        return comments.sort((a, b) => {
+          const aPush = a.type === "push" ? 1 : a.type === "booh" ? -1 : 0;
+          const bPush = b.type === "push" ? 1 : b.type === "booh" ? -1 : 0;
+          return bPush - aPush;
+        });
+      case "newest":
+      default:
+        return comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+  }, [post?.comments, sortBy]);
 
   if (postLoading) {
     return (
@@ -257,10 +279,21 @@ export default function PostPage() {
 
         {/* Comments Section */}
         <div className="mb-6">
-          <h2 className="text-lg font-bold text-accent mb-4">推文 ({post.commentCount})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-bold text-accent">推文 ({post.commentCount})</h2>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "mostPush")}
+              className="bg-input border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-accent text-sm"
+            >
+              <option value="newest">最新</option>
+              <option value="oldest">最舊</option>
+              <option value="mostPush">最多推</option>
+            </select>
+          </div>
           <div className="space-y-px bg-border">
-            {post.comments && post.comments.length > 0 ? (
-              post.comments.map((comment) => (
+            {sortedComments && sortedComments.length > 0 ? (
+              sortedComments.map((comment) => (
                 <div key={comment.id} className={`bg-background p-3 border-b border-border ptt-comment-line`}>
                   <div className={`ptt-comment-type ${
                     comment.type === "push" ? "ptt-push" :
